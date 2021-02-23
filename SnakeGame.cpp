@@ -1,9 +1,11 @@
 #include <iostream>
+#include <ctime>
+#include <cstdlib>
 #include <Windows.h>
 #include <conio.h>
 #include <fstream>
 
-#define KEY_UP 'w'
+#define KEY_UP 'w' 
 #define KEY_DOWN 's'
 #define KEY_RIGHT 'd'
 #define KEY_LEFT 'a'
@@ -26,40 +28,62 @@ int StartFrameY = 6;
 void positionxy(int x, int y);
 void DrawFrame();
 void ShowConsoleCursor(bool showFlag);
-void GameOver(int &XVal, int &Yval, int &ScoreVal, int &HScoreVal, char &HitTypeVal);
+void GameOver(int XVal, int Yval, int &ScoreVal, int &HScoreVal, char &HitTypeVal);
 void Menu();
 void GameStart();
 
+
 class Snake {
+private:
+	int X = 0;
+	int Y = 0;
+	int TailLength = 0;
+
 public:
-	int X = 7;
-	int Y = 7;
+	int *FoodCoord = NULL;
+	int *TailX = NULL;
+	int *TailY = NULL;
 	int score = 0;
 	int highscore = 0;
-	int FoodX{}, FoodY{};
-	int TailX[1000]{};
-	int TailY[1000]{};
-	int TailLength = 2;
 	char HitType = 'N';
-
+	int GameSpeed;
 	void IncrementX() { X++; }
 	void DecrementX() { X--; }
 	void IncrementY() { Y++; }
 	void DecrementY() { Y--; }
+	void IncreaseTail() {TailLength++;}
+	int SnakeTailLength() {return TailLength;}
+	int FoodX() {return FoodCoord[0];}
+	int FoodY() {return FoodCoord[1];}
+	int SnakeX() {return X;}
+	int SnakeY() {return Y;}
+
 
 	void Logic();
 	void SetSnakePosition();
 	void GenerateFood();
 	void CheckSelfHit();
 	void RefreshSnake();
+	void RandomizeSnake();
+
+	Snake() {
+		TailX = new int [1000];
+		TailY = new int [1000];
+		TailLength = 2;
+		RandomizeSnake();
+		GenerateFood();
+
+	}
 };
+
+
 
 void Snake::Logic() {
 	int PrevPosX = TailX[0];
 	int PrevPosY = TailY[0];
 	TailX[0] = X;
 	TailY[0] = Y;
-	int PrevPosX2, PrevPosY2; // WTF
+	int PrevPosX2, PrevPosY2;
 
 	for (int i = 1; i < TailLength; ++i) {
 		PrevPosX2 = TailX[i];
@@ -106,9 +130,14 @@ void Snake::SetSnakePosition() {
 }
 
 void Snake::GenerateFood() {
-	srand(static_cast<unsigned int> (time(NULL)));
-	FoodX = rand() % 33 + 7;
-	FoodY = rand() % 13 + 7;
+	FoodCoord = new int [2];
+	FoodCoord[0] = rand() % (width - StartFrameX + 1) + (StartFrameX + 1);
+	FoodCoord[1] = rand() % (height - StartFrameY + 1) + (StartFrameY + 1);
+}
+
+void Snake::RandomizeSnake() {
+	X = rand() % (width - StartFrameX + 1) + (StartFrameX + 1);
+	Y = rand() % (height - StartFrameY + 1) + (StartFrameY + 1);
 }
 
 void Snake::CheckSelfHit() {
@@ -117,6 +146,7 @@ void Snake::CheckSelfHit() {
 			HitType = 'S';
 			GameOver(X, Y, score, highscore, HitType);
 			HitType = 'N';
+			delete FoodCoord;
 		}
 
 	}
@@ -132,6 +162,7 @@ void Snake::RefreshSnake() {
 }
 
 int main() {
+	srand(static_cast<unsigned int> (time(NULL)));
 	HWND console = GetConsoleWindow();
 	RECT r;
 	GetWindowRect(console, &r);
@@ -146,55 +177,55 @@ int main() {
 
 void GameStart() {
 	Snake Entity;
-	Entity.GenerateFood();
-	dir = Direction::Right; // Default
+	dir = Direction::Right; // Default Direction
 
-
-	ifstream inFile;
+	ifstream inFile; //Read Highscore
 	inFile.open("Highscore.txt");
 	inFile >> Entity.highscore;
 	inFile.close();
 
 	while (GameRunning) {
-
 		ShowConsoleCursor(false);
 		Entity.RefreshSnake();
-
 
 		Entity.Logic();
 		Entity.SetSnakePosition();
 		SetConsoleTextAttribute(hConsole, 0x0E);
-		positionxy(Entity.X, Entity.Y);
-		cout << "O";
-		positionxy(Entity.X, Entity.Y);
 
-		for (int i = 0; i < Entity.TailLength; ++i) {
+		positionxy(Entity.SnakeX(), Entity.SnakeY());
+		cout << "O"; //Head
+		positionxy(Entity.SnakeX(), Entity.SnakeY());
+
+		for (int i = 0; i < Entity.SnakeTailLength(); ++i) {
 			positionxy(Entity.TailX[i], Entity.TailY[i]);
-			cout << "o";
+			cout << "o"; //Tail
 		}
 		SetConsoleTextAttribute(hConsole, 0x0C);
-		SetConsoleTextAttribute(hConsole, 0x0C);
-		positionxy(Entity.FoodX, Entity.FoodY);
-		cout << "*";
+		positionxy(Entity.FoodX(), Entity.FoodY());
+		cout << "*"; //Food
 		SetConsoleTextAttribute(hConsole, 0x0F);
 
-		if (Entity.X == Entity.FoodX && Entity.Y == Entity.FoodY) {
+		//Ate Food
+		if (Entity.SnakeX() == Entity.FoodX() && Entity.SnakeY() == Entity.FoodY()) {
+			delete Entity.FoodCoord;
 			Entity.score++;
 			Entity.GenerateFood();
-			Entity.TailLength++;
+			Entity.IncreaseTail();
 		}
+
+		//Collision Detection - Gameover when hit
+		if (Entity.SnakeX() == StartFrameX || Entity.SnakeX() == StartFrameX + width || Entity.SnakeY() == StartFrameY || Entity.SnakeY() == StartFrameY + height) {
+			Entity.HitType = 'W';
+			delete Entity.FoodCoord;
+			GameOver(Entity.SnakeX(), Entity.SnakeY(), Entity.score, Entity.highscore, Entity.HitType);
+			Entity.HitType = 'N';
+		}
+		Entity.CheckSelfHit();
 
 		positionxy(StartFrameX, StartFrameY + height + 3);
 		cout << "Score : " << Entity.score;
 		positionxy(StartFrameX, StartFrameY + height + 4);
 		cout << "Highscore : " << Entity.highscore;
-
-		if (Entity.X == StartFrameX || Entity.X == StartFrameX + width || Entity.Y == StartFrameY || Entity.Y == StartFrameY + height) {
-			Entity.HitType = 'W';
-			GameOver(Entity.X, Entity.Y, Entity.score, Entity.highscore, Entity.HitType);
-			Entity.HitType = 'N';
-		}
-		Entity.CheckSelfHit();
 
 		Sleep(GameSpeed);
 	}
@@ -242,7 +273,7 @@ void ShowConsoleCursor(bool showFlag) {
 	SetConsoleCursorInfo(out, &cursorInfo);
 }
 
-void GameOver(int &XVal, int &YVal, int& ScoreVal, int& HScoreVal, char &HitTypeVal) {
+void GameOver(int XVal, int YVal, int& ScoreVal, int& HScoreVal, char &HitTypeVal) {
 	
 	if (HitTypeVal == 'W') {
 		positionxy(XVal, YVal);
@@ -262,6 +293,7 @@ void GameOver(int &XVal, int &YVal, int& ScoreVal, int& HScoreVal, char &HitType
 		outFile << ScoreVal;
 		outFile.close();
 	}
+
 	char pause = _getch();
 	system("cls");
 	DrawFrame();
@@ -275,7 +307,7 @@ void Menu() {
 	positionxy(((StartFrameX + width) / 2) - 8, ((StartFrameY + height) / 2) + 6);
 	cout << "Press Enter to continue";
 
-	int position = 1;// 0,1,2
+	int position = 1; // 0 - 25%, 1 - 50%, 2 - 75%
 	char option{};
 	bool Entered = false;
 	bool Running = true;
@@ -292,7 +324,7 @@ void Menu() {
 			else if (option == 'a' && position > 0) {
 				position--;
 			}
-			else if (option == 13) {
+			else if (option == 13) { 
 				Entered = true;
 				GameRunning = true;
 			}
